@@ -17,7 +17,7 @@ platform :ios do
     setup_ci if ENV['CI']
 
     update_project_team(
-      path: "#{GITHUB_WORKSPACE}",
+      path: "#{GITHUB_WORKSPACE}/dospad.xcodeproj",
       teamid: "#{TEAMID}"
     )
 
