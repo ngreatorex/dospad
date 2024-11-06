@@ -59,7 +59,7 @@ platform :ios do
     
     gym(
       export_method: "app-store",
-      scheme: "dospad",
+      scheme: "iDOS",
       output_name: "iDOS.ipa",
       configuration: "Release",
       destination: 'generic/platform=iOS',
