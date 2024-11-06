@@ -15,6 +15,7 @@ platform :ios do
   desc "Build iDOS"
   lane :build_idos do
     setup_ci if ENV['CI']
+
     update_project_team(
       path: "#{GITHUB_WORKSPACE}/dospad.xcodeproj",
       teamid: "#{TEAMID}"
@@ -42,7 +43,8 @@ platform :ios do
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
-        "com.#{TEAMID}.iDOS"
+        "com.#{TEAMID}.iDOS",
+        "com.#{TEAMID}.iDOS.thumbnail",
       ]
     )
 
@@ -53,6 +55,13 @@ platform :ios do
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/dospad.xcodeproj",
       profile_name: mapping["com.#{TEAMID}.iDOS"],
+      code_sign_identity: "iPhone Distribution",
+      targets: ["iDOS"]
+    )
+
+    update_code_signing_settings(
+      path: "#{GITHUB_WORKSPACE}/dospad.xcodeproj",
+      profile_name: mapping["com.#{TEAMID}.iDOS.thumbnail"],
       code_sign_identity: "iPhone Distribution",
       targets: ["iDOS"]
     )
@@ -109,6 +118,10 @@ platform :ios do
     configure_bundle_id("iDOS", "com.#{TEAMID}.iDOS", [
       Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
     ])
+
+    configure_bundle_id("iDOS", "com.#{TEAMID}.iDOS.thumbnail", [
+      Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS
+    ])
   end
 
   desc "Provision Certificates"
@@ -127,7 +140,8 @@ platform :ios do
       force: true,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
-        "com.#{TEAMID}.iDOS"
+        "com.#{TEAMID}.iDOS",
+        "com.#{TEAMID}.iDOS.thumbnail",
       ]
     )
   end
