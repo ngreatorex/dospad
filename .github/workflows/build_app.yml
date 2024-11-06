@@ -81,7 +81,7 @@ jobs:
       
       # Build signed Loop IPA file
       - name: Fastlane Build & Archive
-        run: bundle exec fastlane build_app        
+        run: bundle exec fastlane build_idos
         env:
           TEAMID: ${{ secrets.TEAMID }}
           GH_PAT: ${{ secrets.GH_PAT }}
