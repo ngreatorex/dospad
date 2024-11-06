@@ -1,0 +1,112 @@
+name: 4. Build iDOS
+run-name: Build iDOS (${{ github.ref_name }})
+on:
+  workflow_dispatch:
+  
+  ## Remove the "#" sign from the beginning of the line below to get automated builds on push (code changes in your repository)
+  #push:
+  
+  schedule:
+    - cron: '0 6 1 * *' # Builds the app on the 1st of every month at 06:00 UTC
+
+jobs:
+  validate:
+    name: Validate
+    uses: ./.github/workflows/validate_secrets.yml
+    secrets: inherit
+  
+  # Checks if GH_PAT holds workflow permissions
+  # Checks for existence of alive branch; if non-existent creates it
+  check_alive_and_permissions:
+    needs: validate
+    runs-on: ubuntu-latest
+    name: Check alive branch and permissions
+    permissions:
+      contents: write
+    outputs:
+      WORKFLOW_PERMISSION: ${{ steps.workflow-permission.outputs.has_permission }}
+    
+    steps:
+    - name: Check for workflow permissions
+      id: workflow-permission
+      env: 
+        TOKEN_TO_CHECK: ${{ secrets.GH_PAT }}
+      run: |
+        PERMISSIONS=$(curl -sS -f -I -H "Authorization: token ${{ env.TOKEN_TO_CHECK }}" https://api.github.com | grep ^x-oauth-scopes: | cut -d' ' -f2-);
+        
+        if [[ $PERMISSIONS =~ "workflow" || $PERMISSIONS == "" ]]; then
+          echo "GH_PAT holds workflow permissions or is fine-grained PAT."
+          echo "has_permission=true" >> $GITHUB_OUTPUT # Set WORKFLOW_PERMISSION to false.
+        else 
+          echo "GH_PAT lacks workflow permissions."
+          echo "Automated build features will be skipped!"
+          echo "has_permission=false" >> $GITHUB_OUTPUT # Set WORKFLOW_PERMISSION to false.
+        fi
+    
+  # Build
+  build:
+    name: Build
+    needs: [validate, check_alive_and_permissions]
+    runs-on: macos-14
+    permissions:
+      contents: write
+    if: | # runs if started manually, or if sync schedule is set and enabled and scheduled on the first Saturday each month, or if sync schedule is set and enabled and new commits were found
+        github.event_name == 'workflow_dispatch' ||
+        (needs.check_alive_and_permissions.outputs.WORKFLOW_PERMISSION == 'true' &&
+          (vars.SCHEDULED_BUILD != 'false' && github.event.schedule == '0 6 1 * *') ||
+          (vars.SCHEDULED_SYNC != 'false' && needs.check_latest_from_upstream.outputs.NEW_COMMITS == 'true' )
+        )
+    steps:
+      - name: Select Xcode version
+        run: "sudo xcode-select --switch /Applications/Xcode_15.4.app/Contents/Developer"
+      
+      - name: Checkout Repo for building
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          submodules: recursive
+          ref: master
+          
+      # Patch Fastlane Match to not print tables
+      - name: Patch Match Tables
+        run: find /usr/local/lib/ruby/gems -name table_printer.rb | xargs sed -i "" "/puts(Terminal::Table.new(params))/d"
+      
+      # Install project dependencies
+      - name: Install Project Dependencies
+        run: bundle install
+
+      # Sync the GitHub runner clock with the Windows time server (workaround as suggested in https://github.com/actions/runner/issues/2996)
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com
+      
+      # Build signed Loop IPA file
+      - name: Fastlane Build & Archive
+        run: bundle exec fastlane build_app        
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      
+      # Upload to TestFlight
+      - name: Fastlane upload to TestFlight
+        run: bundle exec fastlane release
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+
+      # Upload Build artifacts
+      - name: Upload build log, IPA and Symbol artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            artifacts
+            buildlog
